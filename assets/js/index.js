@@ -1,358 +1,420 @@
-import Player  from "./player.js";
-import Ghost  from "./ghost.js";
-        
-let width = 800;
-let height = 625;
-let gridSize = 32;
-let offset=parseInt(gridSize/2);
-let config = {
+let score = 0;
+let lives = 3;
+
+function main() {
+  let config = {
     type: Phaser.AUTO,
-    width: width,
-    height: height,
+    width: 800,
+    height: 625,
     physics: {
-        default: 'arcade',
-        arcade: {
-            debug: false,
-            gravity: {
-                x: 0,
-                y: 0
-            }            
-        }
+      default: 'arcade',
     },
     scene: {
-        preload: preload,
-        create: create,
-        update: update
-    }
-};
-
-let game = new Phaser.Game(config);
-let cursors;
-let player;
-let ghosts=[];
-let pills;
-let pillsCount=0;
-let pillsAte=0;
-let map;
-let layer1;
-let layer2;
-let graphics;
-let scoreText;
-let livesImage=[];
-let tiles = "pacman-tiles";
-let spritesheet = 'pacman-spritesheet';
-let spritesheetPath = 'assets/images/pacmansprites.png';
-let tilesPath = 'assets/images/background.png';
-let mapPath = 'assets/levels/codepen-level.json';
-let Animation= {
-    Player : {
-        Eat: 'player-eat',
-        Stay: 'player-stay',
-        Die: 'player-die'
+      preload: loadImages,
+      create: setupGame,
+      update: update,
     },
-    Ghost :{
-        Blue : {
-            Move: 'ghost-blue-move',
-        },
+  };
 
-        Orange : {
-            Move: 'ghost-orange-move',
-        },
+  let game = new Phaser.Game(config);
 
-        White : {
-            Move: 'ghost-white-move',
-        },
+  return game;
+}
 
-        Pink : {
-            Move: 'ghost-pink-move',
-        },
+function loadImages() {
+  const baseUrl =
+    'https://raw.githubusercontent.com/ateagit/phaser-pacman/master/';
 
-        Red : {
-            Move: 'ghost-red-move',
-        },
+  this.load.setBaseURL(baseUrl);
+
+  this.load.spritesheet('sprites', 'assets/images/pacmansprites.png', {
+    frameWidth: 32,
+    frameHeight: 32,
+  });
+
+  this.load.tilemapTiledJSON('map', 'assets/levels/codepen-level.json');
+
+  this.load.image('background', 'assets/images/background.png');
+
+  this.load.image('pill', 'assets/images/pill/normal_pill.png');
+
+  this.load.image('life', 'assets/images/life/life.png');
+}
+
+function setupGame() {
+  let tilemap = setupMap(this.make);
+
+  let objects = tilemap.getObjectLayer('Objects').objects;
+
+  let initialPlayerInfo = objects.find((o) => o.name === 'Player');
+
+  let pacman = setupPacmanPlayer(initialPlayerInfo, this.make, this.physics);
+
+  let initialPillsInfo = objects.filter((o) => o.name === 'Pill');
+
+  let pills = setupPills(initialPillsInfo, this.make, this.physics);
+
+  let initialGhostsInfo = objects.filter((o) => o.name === 'Ghost');
+
+  let ghosts = setupGhosts(initialGhostsInfo, this.make, this.physics);
+
+  setupColliders(this.physics, tilemap, pacman, pills, ghosts);
+
+  let cursors = this.input.keyboard.createCursorKeys();
+
+  let scoreText = setupScoreText(this.add);
+
+  let livesImages = setupLivesText(this.add);
+
+  this.data.set('pacman', pacman);
+  this.data.set('pills', pills);
+  this.data.set('ghosts', ghosts);
+  this.data.set('cursors', cursors);
+  this.data.set('tilemap', tilemap);
+  this.data.set('scoreText', scoreText);
+  this.data.set('lives', livesImages);
+}
+
+function setupLivesText(gameObjectCreator) {
+  let livesImages = [];
+
+  for (let i = 0; i < lives; i++) {
+    livesImages.push(gameObjectCreator.image(700 + i * 25, 605, 'life'));
+  }
+
+  return livesImages;
+}
+
+function setupScoreText(gameObjectCreator) {
+  return gameObjectCreator
+    .text(25, 595, 'Score: ' + score)
+    .setFontFamily('Arial')
+    .setFontSize(18)
+    .setColor('#ffffff');
+}
+
+function setupMap(gameObjectCreator) {
+  let tilemap = gameObjectCreator.tilemap({
+    key: 'map',
+    tileWidth: 32,
+    tileHeight: 32,
+  });
+
+  let tileset = tilemap.addTilesetImage('pacman-tiles', 'background');
+
+  let mapLayer = tilemap.createLayer('Layer 1', tileset, 0, 0);
+  mapLayer.setCollisionByProperty({ collides: true });
+
+  let ghostBlockerLayer = tilemap.createLayer('Layer 2', tileset, 0, 0);
+  ghostBlockerLayer.setCollisionByProperty({ collides: true });
+
+  return tilemap;
+}
+
+function transformInitialPosition(initialInfo) {
+  initialInfo.x = initialInfo.x + initialInfo.width / 2;
+  initialInfo.y = initialInfo.y - initialInfo.height / 2;
+
+  return initialInfo;
+}
+
+function setupPacmanPlayer(initialPlayerInfo, gameObjectCreator, physics) {
+  let player = gameObjectCreator.sprite(
+    transformInitialPosition(initialPlayerInfo)
+  );
+
+  player.setScale(0.8);
+
+  setupPacmanAnimations(player);
+
+  player.anims.play('eat');
+
+  player.setData('initial-position', initialPlayerInfo);
+
+  physics.add.existing(player);
+
+  return player;
+}
+
+function setupPacmanAnimations(pacman) {
+  pacman.anims.create({
+    key: 'eat',
+    frames: pacman.anims.generateFrameNumbers('sprites', {
+      start: 9,
+      end: 13,
+    }),
+    frameRate: 10,
+    repeat: -1,
+  });
+
+  pacman.anims.create({
+    key: 'die',
+    frames: pacman.anims.generateFrameNumbers('sprites', {
+      start: 6,
+      end: 8,
+    }),
+    frameRate: 1,
+  });
+}
+
+function setupPills(initialPillsInfo, gameObjectCreator, physics) {
+  let pillGroup = physics.add.group();
+
+  for (let i = 0; i < initialPillsInfo.length; ++i) {
+    let pillInfo = transformInitialPosition(initialPillsInfo[i]);
+
+    let pill = gameObjectCreator.sprite({
+      x: pillInfo.x,
+      y: pillInfo.y,
+      key: 'pill',
+    });
+
+    physics.add.existing(pill);
+
+    pillGroup.add(pill);
+  }
+
+  return pillGroup;
+}
+
+function setupGhosts(initialGhostsInfo, gameObjectCreator, physics) {
+  const ghostsGroup = physics.add.group();
+
+  const ghostFrames = [0, 4, 14, 16];
+  const ghostColours = ['red', 'orange', 'pink', 'blue'];
+
+  for (let i = 0; i < initialGhostsInfo.length; ++i) {
+    const ghostInfo = transformInitialPosition(initialGhostsInfo[i]);
+
+    const ghost = gameObjectCreator.sprite({
+      x: ghostInfo.x,
+      y: ghostInfo.y,
+      key: 'sprites',
+      frame: ghostFrames[i],
+    });
+
+    ghost.setData('initial-position', ghostInfo);
+
+    ghost.name = ghostColours[i];
+
+    physics.add.existing(ghost);
+    ghostsGroup.add(ghost);
+  }
+
+  return ghostsGroup;
+}
+
+function setupColliders(physics, tilemap, pacman, pills, ghosts) {
+  physics.add.collider(pacman, tilemap.getLayer('Layer 1').tilemapLayer);
+  physics.add.collider(pacman, tilemap.getLayer('Layer 2').tilemapLayer);
+  physics.add.collider(ghosts, tilemap.getLayer('Layer 1').tilemapLayer);
+
+  physics.add.overlap(pacman, pills, handlePacmanEatPill);
+  physics.add.overlap(pacman, ghosts, (pacman) => {
+    handleGhostEatPacman(pacman, ghosts.children.entries);
+  });
+
+  pacman.on('animationcomplete', function (animation) {
+    if (animation.key === 'die') {
+      handleDieAnimationComplete(pacman, ghosts.children.entries);
     }
+  });
+}
+
+function handlePacmanEatPill(pacman, pill) {
+  score = score + 5;
+
+  pill.destroy();
+}
+
+function handleGhostEatPacman(pacman, ghosts) {
+  pacman.body.setEnable(false);
+
+  for (let i = 0; i < ghosts.length; ++i) {
+    let ghost = ghosts[i];
+
+    ghost.setVisible(false);
+  }
+
+  pacman.anims.play('die');
+
+  lives = lives - 1;
+}
+
+function handleDieAnimationComplete(pacman, ghosts) {
+  respawn(pacman, ghosts);
+  for (let i = 0; i < ghosts.length; ++i) {
+    let ghost = ghosts[i];
+
+    ghost.setVisible(true);
+  }
+
+  pacman.body.setEnable(true);
+  pacman.anims.play('eat');
+}
+
+function respawn(pacman, ghosts) {
+  let pacmanRespawnPoint = pacman.getData('initial-position');
+  pacman.setPosition(pacmanRespawnPoint.x, pacmanRespawnPoint.y);
+
+  for (let i = 0; i < ghosts.length; ++i) {
+    let ghostRespawnPoint = ghosts[i].getData('initial-position');
+    ghosts[i].setPosition(ghostRespawnPoint.x, ghostRespawnPoint.y);
+  }
+}
+
+let game = main();
+
+function update() {
+  let cursors = this.data.get('cursors');
+  let pacman = this.data.get('pacman');
+  let tilemap = this.data.get('tilemap');
+  let ghostsGroup = this.data.get('ghosts');
+  let scoreText = this.data.get('scoreText');
+  let livesImages = this.data.get('lives');
+
+  handlePacmanMovement(pacman, tilemap, cursors);
+
+  const ghosts = ghostsGroup.children.entries;
+
+  for (let i = 0; i < ghosts.length; ++i) {
+    let ghost = ghosts[i];
+
+    handleGhostMovement(ghost, tilemap);
+  }
+
+  scoreText.setText('Score: ' + score);
+
+  for (let i = lives; i < livesImages.length; ++i) {
+    livesImages[i].alpha = 0;
+  }
+}
+
+let randomNumberGenerator = new Phaser.Math.RandomDataGenerator();
+
+function handleGhostMovement(ghost, tilemap) {
+  const randomNumber = randomNumberGenerator.integerInRange(1, 200);
+  const probabilityOfRandomlyChangingDirection = 1;
+
+  // if ghost cant move or we hit that 1/200 chance of changing direction randomly
+  if (
+    ghost.body.speed === 0 ||
+    randomNumber <= probabilityOfRandomlyChangingDirection
+  ) {
+    changeDirection(getRandomDirection(ghost, tilemap), ghost);
+  }
+}
+
+function getRandomDirection(ghost, tilemap) {
+  let directions = [Phaser.UP, Phaser.RIGHT, Phaser.DOWN, Phaser.LEFT];
+
+  randomNumberGenerator.shuffle(directions);
+
+  for (let i = 0; i < directions.length; ++i) {
+    if (canMove(directions[i], ghost, tilemap, 32)) {
+      return directions[i];
+    }
+  }
+
+  throw new Error(ghost.name);
+}
+
+let newDirection = Phaser.RIGHT;
+
+let currentDirection;
+
+function handlePacmanMovement(pacman, tilemap, cursors) {
+  if (cursors.up.isDown) {
+    newDirection = Phaser.UP;
+  } else if (cursors.right.isDown) {
+    newDirection = Phaser.RIGHT;
+  } else if (cursors.down.isDown) {
+    newDirection = Phaser.DOWN;
+  } else if (cursors.left.isDown) {
+    newDirection = Phaser.LEFT;
+  }
+
+  if (newDirection === currentDirection) {
+    return;
+  }
+
+  if (!canMove(newDirection, pacman, tilemap)) {
+    return;
+  }
+
+  if (!isOpposite(currentDirection, newDirection)) {
+    snapToCenterOfTile(pacman);
+  }
+
+  changeDirection(newDirection, pacman, true);
+  currentDirection = newDirection;
+}
+
+function snapToCenterOfTile(pacman) {
+  const tileX = Phaser.Math.Snap.Floor(pacman.x, 32);
+  const tileY = Phaser.Math.Snap.Floor(pacman.y, 32);
+  pacman.x = tileX + 16;
+  pacman.y = tileY + 16;
+}
+
+const opposites = {
+  [Phaser.RIGHT]: Phaser.LEFT,
+  [Phaser.LEFT]: Phaser.RIGHT,
+  [Phaser.UP]: Phaser.DOWN,
+  [Phaser.DOWN]: Phaser.UP,
 };
 
-function preload ()
-{
-    this.load.spritesheet(spritesheet, spritesheetPath, { frameWidth: gridSize, frameHeight: gridSize });
-    this.load.tilemapTiledJSON("map", mapPath);
-    this.load.image(tiles, tilesPath);
-    this.load.image("pill", "assets/images/pac man pill/spr_pill_0.png");
-    this.load.image("lifecounter", "assets/images/pac man life counter/spr_lifecounter_0.png");
+function isOpposite(directionA, directionB) {
+  return opposites[directionA] === directionB;
 }
 
-function create ()
-{    
-    this.anims.create({
-            key: Animation.Player.Eat,
-            frames: this.anims.generateFrameNumbers(spritesheet, { start: 9, end: 13 }),
-            frameRate: 10,
-            repeat: -1
-        });
+function canMove(direction, sprite, tilemap, threshold = 5) {
+  const tileX = Phaser.Math.Snap.Floor(sprite.x, 32);
+  const tileY = Phaser.Math.Snap.Floor(sprite.y, 32);
 
-    this.anims.create({
-        key: Animation.Player.Stay,
-        frames: [ { key: spritesheet, frame: 9 } ],
-        frameRate: 20
-    });
+  const walls = tilemap.getLayer('Layer 1').tilemapLayer;
 
-    this.anims.create({
-        key: Animation.Player.Die,
-        frames: this.anims.generateFrameNumbers(spritesheet, { start: 6, end: 8 }),
-        frameRate: 1
-    });
+  const tileUp = walls.getTileAtWorldXY(tileX, tileY - 32);
+  const tileRight = walls.getTileAtWorldXY(tileX + 32, tileY);
+  const tileDown = walls.getTileAtWorldXY(tileX, tileY + 32);
+  const tileLeft = walls.getTileAtWorldXY(tileX - 32, tileY);
 
-    this.anims.create({
-            key: Animation.Ghost.Blue.Move,
-            frames: this.anims.generateFrameNumbers(spritesheet, { start: 0, end: 1 }),
-            frameRate: 10,
-            repeat: -1
-        });
+  const distance = Phaser.Math.Distance.Between(
+    tileX + 16,
+    tileY + 16,
+    sprite.x,
+    sprite.y
+  );
 
-    this.anims.create({
-            key: Animation.Ghost.Orange.Move,
-            frames: this.anims.generateFrameNumbers(spritesheet, { start: 4, end: 5 }),
-            frameRate: 10,
-            repeat: -1
-        });
-
-    this.anims.create({
-            key: Animation.Ghost.White.Move,
-            frames: this.anims.generateFrameNumbers(spritesheet, { start: 4, end: 5 }),
-            frameRate: 10,
-            repeat: -1
-        });
-
-    this.anims.create({
-            key: Animation.Ghost.Pink.Move,
-            frames: this.anims.generateFrameNumbers(spritesheet, { start: 14, end: 15 }),
-            frameRate: 10,
-            repeat: -1
-        });
-
-    this.anims.create({
-            key: Animation.Ghost.Red.Move,
-            frames: this.anims.generateFrameNumbers(spritesheet, { start: 16, end: 17 }),
-            frameRate: 10,
-            repeat: -1
-        });
-
-    map = this.make.tilemap({ key: "map", tileWidth: gridSize, tileHeight: gridSize });
-    const tileset = map.addTilesetImage(tiles);
-    
-    layer1 = map.createStaticLayer("Layer 1", tileset, 0, 0);
-    layer1.setCollisionByProperty({ collides: true});
-
-    layer2 = map.createStaticLayer("Layer 2", tileset, 0, 0);
-    layer2.setCollisionByProperty({ collides: true});
-    
-    let spawnPoint = map.findObject("Objects", obj => obj.name === "Player");  
-    let position = new Phaser.Geom.Point(spawnPoint.x + offset, spawnPoint.y - offset);
-    player = new Player(this, position, Animation.Player, function() {
-        if(player.life <= 0) {
-            newGame();
-        }
-        else {
-            respawn();
-        }
-    });
-
-    let scene = this;
-
-    pills = this.physics.add.group();
-    map.filterObjects("Objects", function (value, index, array) {
-        if(value.name == "Pill") {
-            let pill=scene.physics.add
-                .sprite(value.x + offset, value.y - offset, "pill");
-            pills.add(pill);
-            pillsCount++;
-        }
-    });
-
-    
-    let ghostsGroup = this.physics.add.group();
-    let i=0;
-    let skins=[Animation.Ghost.Blue, Animation.Ghost.Red, Animation.Ghost.Orange , Animation.Ghost.Pink];
-     map.filterObjects("Objects", function (value, index, array) {        
-        if(value.name == "Ghost") {
-            let position = new Phaser.Geom.Point(value.x + offset, value.y - offset);
-            let ghost = new Ghost(scene, position, skins[i]);
-            ghosts.push(ghost);    
-            ghostsGroup.add(ghost.sprite);
-            i++;
-        }
-     });
-
-    this.physics.add.collider(player.sprite, layer1);
-    this.physics.add.collider(player.sprite, layer2);
-    this.physics.add.collider(ghostsGroup, layer1);
-    this.physics.add.overlap(player.sprite, pills, function(sprite, pill) {        
-        pill.disableBody(true, true);
-        pillsAte++;
-        player.score+=10;
-        if(pillsCount==pillsAte) {
-            reset();
-        }
-    }, null, this);
-
-    this.physics.add.overlap(player.sprite, ghostsGroup, function(sprite, ghostSprite) {
-        if(player.active) {
-            player.die();
-            for(let ghost of ghosts) {
-                ghost.freeze();
-            }   
-        }
-    }, null, this);
-
-    cursors= this.input.keyboard.createCursorKeys();
-
-    graphics = this.add.graphics();
-
-    scoreText =  this.add.text(25, 595, 'Score: '+player.score).setFontFamily('Arial').setFontSize(18).setColor('#ffffff');
-    this.add.text(630, 595, 'Lives:').setFontFamily('Arial').setFontSize(18).setColor('#ffffff');
-    for (let i =  0; i < player.life; i++) {
-        livesImage.push(this.add.image(700 + (i * 25), 605, 'lifecounter'));
-    }
-}
-
-function respawn() {
-    player.respawn();
-    for(let ghost of ghosts) {
-            ghost.respawn();
-        }    
-}
-
-function reset() {
-    respawn();
-    for (let child of pills.getChildren()) {
-            child.enableBody(false, child.x, child.y, true, true);
-        }
-    pillsAte=0;
-    
-}
-
-function newGame() {
-    reset();
-    player.life=3;
-    player.score=0;
-    for (let i = 0; i < player.life; i++) {
-        let image = livesImage[i];
-        if(image) {
-            image.alpha=1;
-        }
-    }
-}
-
-function update()
-{
-    player.setDirections(getDirection(map, layer1, player.sprite));
-
-    if(!player.playing) {
-        for(let ghost of ghosts) {
-            ghost.freeze();
-        }        
-    }
-
-    for(let ghost of ghosts) {
-        ghost.setDirections(getDirection(map, layer1, ghost.sprite));
-    }
-
-    player.setTurningPoint(getTurningPoint(map, player.sprite));
-
-    for(let ghost of ghosts) {
-        ghost.setTurningPoint(getTurningPoint(map, ghost.sprite));
-    }
-
-    if (cursors.left.isDown)
+  return (
     {
-        player.setTurn(Phaser.LEFT);
-    }
-    else if (cursors.right.isDown)
-    {
-        player.setTurn(Phaser.RIGHT);
-    }   
-    else if (cursors.up.isDown)
-    {
-        player.setTurn(Phaser.UP);
-    }
-    else if (cursors.down.isDown)
-    {
-        player.setTurn(Phaser.DOWN);
-    }
-    else
-    {
-        player.setTurn(Phaser.NONE);   
-    }
-
-    player.update();  
-
-    for(let ghost of ghosts) {
-        ghost.update();
-    }
-
-    scoreText.setText('Score: '+player.score);
-
-    for (let i = player.life; i < 3; i++) {
-        let image = livesImage[i];
-        if(image) {
-            image.alpha=0;
-        }
-    }
-
-    if(player.active) {
-        if(player.sprite.x < 0 - offset ) {            
-            player.sprite.setPosition(width + offset, player.sprite.y);
-        }
-        else if(player.sprite.x> width + offset) {
-            player.sprite.setPosition(0 - offset, player.sprite.y);
-        }
-    }
-    
-
-    //drawDebug();
+      [Phaser.UP]: tileUp,
+      [Phaser.RIGHT]: tileRight,
+      [Phaser.DOWN]: tileDown,
+      [Phaser.LEFT]: tileLeft,
+    }[direction] === null && distance < threshold
+  );
 }
 
-function drawDebug() {
-    graphics.clear();
-    player.drawDebug(graphics);
-    for(let ghost of ghosts) {
-            ghost.drawDebug(graphics);
-        }
+function changeDirection(direction, sprite, angle) {
+  let speed = 100;
+  sprite.body.setVelocity(0);
+  switch (direction) {
+    case Phaser.UP:
+      sprite.body.setVelocityY(-1 * speed);
+      angle && sprite.setAngle(-90);
+      return;
+    case Phaser.RIGHT:
+      sprite.body.setVelocityX(speed);
+      angle && sprite.setAngle(0);
+      return;
+    case Phaser.DOWN:
+      sprite.body.setVelocityY(speed);
+      angle && sprite.setAngle(90);
+      return;
+    case Phaser.LEFT:
+      sprite.body.setVelocityX(-1 * speed);
+      angle && sprite.setAngle(180);
+      return;
+  }
 }
-
-function getDirection(map, layer, sprite) {
-    let directions = [];
-    let sx=Phaser.Math.FloorTo(sprite.x);
-    let sy=Phaser.Math.FloorTo(sprite.y);
-    let currentTile = map.getTileAtWorldXY(sx, sy, true);  
-    if(currentTile) {
-
-        var x = currentTile.x;
-        var y = currentTile.y;
-
-        directions[Phaser.LEFT]     =   map.getTileAt(x-1, y, true, layer);
-        directions[Phaser.RIGHT]    =   map.getTileAt(x+1, y, true, layer);
-        directions[Phaser.UP]       =   map.getTileAt(x, y-1, true, layer);
-        directions[Phaser.DOWN]     =   map.getTileAt(x, y+1, true, layer);
-
-    }
-
-    return directions;
-}
-
-function getTurningPoint(map, sprite) {
-    let turningPoint = new Phaser.Geom.Point();
-    let sx=Phaser.Math.FloorTo(sprite.x);
-    let sy=Phaser.Math.FloorTo(sprite.y);
-    let currentTile = map.getTileAtWorldXY(sx, sy, true);  
-    if(currentTile) {    
-        turningPoint.x = currentTile.pixelX + offset;
-        turningPoint.y = currentTile.pixelY + offset;
-    }
-
-    return turningPoint;
-}
-
-
-      
