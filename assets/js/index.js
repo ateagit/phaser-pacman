@@ -1,28 +1,20 @@
 let score = 0;
 let lives = 3;
 
-function main() {
-  let config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 625,
-    physics: {
-      default: 'arcade',
-    },
-    scene: {
-      preload: loadImages,
-      create: setupGame,
-      update: update,
-    },
-  };
+function handlePacmanEatPill(pacman, pill) {
+  // increase the score by 5
+  // remove the pill from the screen
+}
 
-  let game = new Phaser.Game(config);
-
-  return game;
+function handleGhostEatPacman(pacman, ghosts) {
+  // stop pacman
+  // make all the ghosts invisible
+  // play pacmans death animation
+  // decrease lives by 1
 }
 
 function loadImages() {
-  const baseUrl =
+  let baseUrl =
     'https://raw.githubusercontent.com/ateagit/phaser-pacman/master/';
 
   this.load.setBaseURL(baseUrl);
@@ -178,15 +170,15 @@ function setupPills(initialPillsInfo, gameObjectCreator, physics) {
 }
 
 function setupGhosts(initialGhostsInfo, gameObjectCreator, physics) {
-  const ghostsGroup = physics.add.group();
+  let ghostsGroup = physics.add.group();
 
-  const ghostFrames = [0, 4, 14, 16];
-  const ghostColours = ['red', 'orange', 'pink', 'blue'];
+  let ghostFrames = [0, 4, 14, 16];
+  let ghostColours = ['red', 'orange', 'pink', 'blue'];
 
   for (let i = 0; i < initialGhostsInfo.length; ++i) {
-    const ghostInfo = transformInitialPosition(initialGhostsInfo[i]);
+    let ghostInfo = transformInitialPosition(initialGhostsInfo[i]);
 
-    const ghost = gameObjectCreator.sprite({
+    let ghost = gameObjectCreator.sprite({
       x: ghostInfo.x,
       y: ghostInfo.y,
       key: 'sprites',
@@ -219,26 +211,6 @@ function setupColliders(physics, tilemap, pacman, pills, ghosts) {
       handleDieAnimationComplete(pacman, ghosts.children.entries);
     }
   });
-}
-
-function handlePacmanEatPill(pacman, pill) {
-  score = score + 5;
-
-  pill.destroy();
-}
-
-function handleGhostEatPacman(pacman, ghosts) {
-  pacman.body.setEnable(false);
-
-  for (let i = 0; i < ghosts.length; ++i) {
-    let ghost = ghosts[i];
-
-    ghost.setVisible(false);
-  }
-
-  pacman.anims.play('die');
-
-  lives = lives - 1;
 }
 
 function handleDieAnimationComplete(pacman, ghosts) {
@@ -275,7 +247,7 @@ function update() {
 
   handlePacmanMovement(pacman, tilemap, cursors);
 
-  const ghosts = ghostsGroup.children.entries;
+  let ghosts = ghostsGroup.children.entries;
 
   for (let i = 0; i < ghosts.length; ++i) {
     let ghost = ghosts[i];
@@ -293,8 +265,8 @@ function update() {
 let randomNumberGenerator = new Phaser.Math.RandomDataGenerator();
 
 function handleGhostMovement(ghost, tilemap) {
-  const randomNumber = randomNumberGenerator.integerInRange(1, 200);
-  const probabilityOfRandomlyChangingDirection = 1;
+  let randomNumber = randomNumberGenerator.integerInRange(1, 200);
+  let probabilityOfRandomlyChangingDirection = 1;
 
   // if ghost cant move or we hit that 1/200 chance of changing direction randomly
   if (
@@ -351,13 +323,13 @@ function handlePacmanMovement(pacman, tilemap, cursors) {
 }
 
 function snapToCenterOfTile(pacman) {
-  const tileX = Phaser.Math.Snap.Floor(pacman.x, 32);
-  const tileY = Phaser.Math.Snap.Floor(pacman.y, 32);
+  let tileX = Phaser.Math.Snap.Floor(pacman.x, 32);
+  let tileY = Phaser.Math.Snap.Floor(pacman.y, 32);
   pacman.x = tileX + 16;
   pacman.y = tileY + 16;
 }
 
-const opposites = {
+let opposites = {
   [Phaser.RIGHT]: Phaser.LEFT,
   [Phaser.LEFT]: Phaser.RIGHT,
   [Phaser.UP]: Phaser.DOWN,
@@ -369,17 +341,17 @@ function isOpposite(directionA, directionB) {
 }
 
 function canMove(direction, sprite, tilemap, threshold = 5) {
-  const tileX = Phaser.Math.Snap.Floor(sprite.x, 32);
-  const tileY = Phaser.Math.Snap.Floor(sprite.y, 32);
+  let tileX = Phaser.Math.Snap.Floor(sprite.x, 32);
+  let tileY = Phaser.Math.Snap.Floor(sprite.y, 32);
 
-  const walls = tilemap.getLayer('Layer 1').tilemapLayer;
+  let walls = tilemap.getLayer('Layer 1').tilemapLayer;
 
-  const tileUp = walls.getTileAtWorldXY(tileX, tileY - 32);
-  const tileRight = walls.getTileAtWorldXY(tileX + 32, tileY);
-  const tileDown = walls.getTileAtWorldXY(tileX, tileY + 32);
-  const tileLeft = walls.getTileAtWorldXY(tileX - 32, tileY);
+  let tileUp = walls.getTileAtWorldXY(tileX, tileY - 32);
+  let tileRight = walls.getTileAtWorldXY(tileX + 32, tileY);
+  let tileDown = walls.getTileAtWorldXY(tileX, tileY + 32);
+  let tileLeft = walls.getTileAtWorldXY(tileX - 32, tileY);
 
-  const distance = Phaser.Math.Distance.Between(
+  let distance = Phaser.Math.Distance.Between(
     tileX + 16,
     tileY + 16,
     sprite.x,
@@ -417,4 +389,24 @@ function changeDirection(direction, sprite, angle) {
       angle && sprite.setAngle(180);
       return;
   }
+}
+
+function main() {
+  let config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 625,
+    physics: {
+      default: 'arcade',
+    },
+    scene: {
+      preload: loadImages,
+      create: setupGame,
+      update: update,
+    },
+  };
+
+  let game = new Phaser.Game(config);
+
+  return game;
 }
